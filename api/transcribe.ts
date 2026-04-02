@@ -13,13 +13,6 @@ export default async function handler(
     
     console.log('=== BACKEND TRANSCRIBE API ===');
     console.log('API Key present:', !!apiKey);
-    if (apiKey) {
-      console.log('API Key starts with:', apiKey.substring(0, 15) + '...');
-      console.log('API Key length:', apiKey.length);
-    } else {
-      console.error('ERROR: VITE_OPENAI_API_KEY not found in environment');
-      console.error('Available environment keys:', Object.keys(process.env).filter(k => k.includes('OPEN') || k.includes('API') || k.includes('VITE')));
-    }
     
     if (!apiKey) {
       console.error('Missing API key');
@@ -29,30 +22,30 @@ export default async function handler(
       });
     }
 
-    console.log('Transcription request received, forwarding to OpenAI...');
-    console.log('Request Content-Type:', req.headers['content-type']);
-    console.log('Request body type:', typeof req.body);
-    console.log('Request body keys:', typeof req.body === 'object' ? Object.keys(req.body).slice(0, 5) : 'N/A');
-
-    // For Vercel, req.body is already a parsed object/buffer
-    // We need to reconstruct the multipart FormData or convert to Buffer
-    let bodyToSend: any = req.body;
+    const contentType = req.headers['content-type'] as string;
+    console.log('Request Content-Type:', contentType);
     
-    // If body is a string or Buffer, send as-is
-    // If it's an object (which shouldn't happen with multipart), log it
-    if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-      console.log('❌ Request body is an object, not a Buffer. This may cause issues.');
-      console.log('Body sample:', JSON.stringify(req.body).substring(0, 200));
+    if (!contentType?.includes('multipart')) {
+      throw new Error('Request must be multipart/form-data');
     }
 
+    // Get the raw body as buffer
+    let bodyBuffer = req.body;
+    if (typeof bodyBuffer === 'string') {
+      bodyBuffer = Buffer.from(bodyBuffer, 'utf-8');
+    }
+    
+    console.log('Body received - type:', typeof bodyBuffer, 'is buffer:', Buffer.isBuffer(bodyBuffer), 'size:', bodyBuffer?.length);
+
+    // Forward the exact same request to OpenAI with the exact same Content-Type
+    // This preserves the multipart boundaries
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        // Send the same Content-Type as the incoming request
-        'Content-Type': req.headers['content-type'] || 'application/octet-stream',
+        'Content-Type': contentType, // Critical: include the boundary!
       },
-      body: bodyToSend,
+      body: bodyBuffer,
     });
 
     console.log('OpenAI response status:', response.status);
