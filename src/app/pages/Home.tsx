@@ -34,21 +34,23 @@ export default function Home() {
     
     const filteredTopics = getFilteredTopics();
     
-    // Create array of topics for continuous spinning animation
+    // Create array of topics for spinning
     const spinTopics: string[] = [];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 20; i++) {
       const randomTopic = filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
       spinTopics.push(randomTopic.text);
     }
     
-    // Add the final topic at the end
+    // Add the final topic
     const finalTopic = filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
-    spinTopics.push(finalTopic.text);
     
-    setSpinningTopics(spinTopics);
+    // Create repeating list and add extra copies of final topic at end to fill the viewport
+    const repeatedTopics = [...spinTopics, ...spinTopics, ...spinTopics, finalTopic, finalTopic];
+    
+    setSpinningTopics(repeatedTopics);
     setSelectedTopic(finalTopic.text);
     
-    // After continuous spinning completes, immediately show popup
+    // After spinning completes, show popup
     setTimeout(() => {
       setCurrentTopic(finalTopic.text);
       setIsSpinning(false);
