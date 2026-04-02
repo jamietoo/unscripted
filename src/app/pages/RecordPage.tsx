@@ -14,11 +14,25 @@ export default function RecordPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string>("");
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Create stable audio URL when audioBlob changes
+  useEffect(() => {
+    if (audioBlob) {
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+    setAudioUrl("");
+  }, [audioBlob]);
 
   // Check microphone permission on mount
   useEffect(() => {
@@ -46,7 +60,7 @@ export default function RecordPage() {
   };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     
     if (isRunning && timeLeft > 0) {
       interval = setInterval(() => {
@@ -279,7 +293,7 @@ export default function RecordPage() {
             <p className="text-3xl font-bold text-orange-400">Time's up! You did amazing! 🎉</p>
             {audioBlob && (
               <div className="flex flex-col gap-6 items-center">
-                <audio controls src={URL.createObjectURL(audioBlob)} className="w-full max-w-md rounded-[2rem]" />
+                <audio controls src={audioUrl} className="w-full max-w-md rounded-[2rem]" />
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button 
                     onClick={downloadRecording}
