@@ -94,6 +94,7 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     
   } catch (error) {
     console.error("❌ Transcription error caught:", error);
+    console.error("Error type:", error?.constructor?.name);
     
     if (error instanceof TypeError) {
       // Network error or CORS issue
@@ -104,11 +105,17 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
       throw new Error("🌐 Network error. Check internet connection or try again.");
     }
     
+    if (error instanceof SyntaxError) {
+      // JSON parsing error
+      console.error("JSON parse error:", error.message);
+      throw new Error("💥 Invalid API response. OpenAI API may be down.");
+    }
+    
     if (error instanceof Error) {
       throw error;
     }
     
-    throw new Error("Unknown error during transcription");
+    throw new Error("❓ Unknown error during transcription: " + String(error));
   }
 }
 
@@ -260,8 +267,21 @@ export default function ResultsPage() {
         const text = await transcribeAudio(audioBlob);
         setTranscription(text);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to transcribe audio. Please try again.";
-        console.error("Transcription error in useEffect:", errorMessage);
+        console.error("Full error object:", err);
+        console.error("Error type:", typeof err);
+        console.error("Error constructor:", err?.constructor?.name);
+        
+        let errorMessage = "Unknown error occurred";
+        
+        if (err instanceof Error) {
+          errorMessage = err.message;
+        } else if (typeof err === 'string') {
+          errorMessage = err;
+        } else if (err && typeof err === 'object') {
+          errorMessage = JSON.stringify(err);
+        }
+        
+        console.error("Final error message to display:", errorMessage);
         setError(errorMessage);
         setTranscription("");
       } finally {
@@ -276,7 +296,15 @@ export default function ResultsPage() {
     setRetrying(true);
   };
   
-  const segments = transcription ? highlightText(transcription) : [];
+  const segments = transcription ? (() => {
+    try {
+      return highlightText(transcription);
+    } catch (err) {
+      console.error("Error highlighting text:", err);
+      // Return plain segments if highlighting fails
+      return [{ text: transcription, type: 'normal' as const }];
+    }
+  })() : [];
   
   const handleCopyText = () => {
     if (transcription) {
@@ -325,11 +353,14 @@ export default function ResultsPage() {
               <p className="text-sm text-amber-600">This may take a moment depending on recording length.</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4">
-              <AlertCircle className="w-12 h-12 text-red-500" />
-              <p className="text-lg text-red-800 font-medium">Transcription Failed</p>
-              <p className="text-sm text-red-600 text-center max-w-sm">{error}</p>
-              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+            <div className="flex flex-col items-center justify-center h-full gap-4 px-4">
+              <AlertCircle className="w-16 h-16 text-red-500" />
+              <p className="text-2xl text-red-800 font-bold">Transcription Failed</p>
+              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 max-w-md">
+                <p className="text-sm text-red-700 text-center font-mono break-words">{error || "Unknown error"}</p>
+              </div>
+              <p className="text-xs text-gray-600 mt-2">📋 Error details have been logged. Check DevTools (F12) for more info.</p>
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <Button
                   onClick={handleRetry}
                   disabled={isLoading}
