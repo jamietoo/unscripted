@@ -11,10 +11,21 @@ export default async function handler(
   try {
     const apiKey = process.env.VITE_OPENAI_API_KEY;
     
+    console.log('=== BACKEND TRANSCRIBE API ===');
+    console.log('API Key present:', !!apiKey);
+    if (apiKey) {
+      console.log('API Key starts with:', apiKey.substring(0, 15) + '...');
+      console.log('API Key length:', apiKey.length);
+    } else {
+      console.error('ERROR: VITE_OPENAI_API_KEY not found in environment');
+      console.error('Available environment keys:', Object.keys(process.env).filter(k => k.includes('OPEN') || k.includes('API') || k.includes('VITE')));
+    }
+    
     if (!apiKey) {
-      console.error('OpenAI API key not found in environment');
+      console.error('Missing API key');
       return res.status(500).json({ 
-        error: 'Server configuration error: API key missing' 
+        error: 'Server configuration error: OpenAI API key not configured in Vercel environment variables',
+        hint: 'Add VITE_OPENAI_API_KEY to Project Settings > Environment Variables'
       });
     }
 
@@ -41,11 +52,13 @@ export default async function handler(
         errorDetail = await response.text();
       }
 
-      console.error('OpenAI API error:', errorDetail);
+      console.error('OpenAI API error:', response.status, errorDetail);
 
       if (response.status === 401) {
         return res.status(401).json({ 
-          error: 'Authentication failed. API key may be invalid.' 
+          error: 'Authentication failed with OpenAI API',
+          detail: 'The API key provided is invalid or expired',
+          hint: 'Check your VITE_OPENAI_API_KEY in Vercel environment variables'
         });
       } else if (response.status === 429) {
         return res.status(429).json({ 
@@ -63,7 +76,7 @@ export default async function handler(
     }
 
     const result = await response.json();
-    console.log('Transcription successful');
+    console.log('✅ Transcription successful');
     return res.status(200).json(result);
 
   } catch (error) {
