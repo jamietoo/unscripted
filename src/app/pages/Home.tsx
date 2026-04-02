@@ -9,8 +9,10 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [currentTopic, setCurrentTopic] = useState("");
   const [isSpinning, setIsSpinning] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [showTopicPopup, setShowTopicPopup] = useState(false);
   const [spinningTopics, setSpinningTopics] = useState<string[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState("");
 
   // Get initial random topic on mount
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function Home() {
 
   const handleSpin = () => {
     setIsSpinning(true);
+    setIsProcessing(false);
     setShowTopicPopup(false);
     
     const filteredTopics = getFilteredTopics();
@@ -43,12 +46,19 @@ export default function Home() {
     spinTopics.push(finalTopic.text);
     
     setSpinningTopics(spinTopics);
+    setSelectedTopic(finalTopic.text);
     
-    // After animation completes, show popup
+    // After animation completes, show processing spinner
     setTimeout(() => {
-      setCurrentTopic(finalTopic.text);
       setIsSpinning(false);
-      setShowTopicPopup(true);
+      setIsProcessing(true);
+      
+      // Then show popup after brief processing moment
+      setTimeout(() => {
+        setCurrentTopic(finalTopic.text);
+        setIsProcessing(false);
+        setShowTopicPopup(true);
+      }, 800);
     }, 2500);
   };
 
@@ -122,6 +132,15 @@ export default function Home() {
                   ))}
                 </motion.div>
               </div>
+            ) : isProcessing ? (
+              <div className="flex flex-col items-center justify-center gap-4">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  className="w-16 h-16 border-4 border-orange-200 border-t-orange-500 rounded-full"
+                />
+                <p className="text-amber-800 font-medium text-lg">Finding your perfect topic... 🎯</p>
+              </div>
             ) : (
               <motion.div
                 key={currentTopic}
@@ -139,14 +158,14 @@ export default function Home() {
         <Button
           size="lg"
           onClick={handleSpin}
-          disabled={isSpinning}
+          disabled={isSpinning || isProcessing}
           className="px-24 py-8 text-xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 hover:from-orange-500 hover:to-amber-500 text-white rounded-full shadow-[0_8px_20px_rgb(251,146,60,0.3)] hover:shadow-[0_12px_30px_rgb(251,146,60,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
         >
-          {isSpinning ? "Spinning... 🎲" : "Spin! 🎲"}
+          {isSpinning ? "Spinning... 🎲" : isProcessing ? "Processing... 🎲" : "Spin! 🎲"}
         </Button>
 
         {/* Timer and Record Buttons */}
-        {currentTopic && !isSpinning && (
+        {currentTopic && !isSpinning && !isProcessing && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
