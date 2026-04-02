@@ -42,7 +42,7 @@ export default function Home() {
     const finalTopic = filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
     
     // Create repeating list and add extra copies of final topic at end to fill the viewport
-    const repeatedTopics = [...spinTopics, ...spinTopics, ...spinTopics, finalTopic, finalTopic];
+    const repeatedTopics = [...spinTopics, ...spinTopics, ...spinTopics, finalTopic.text, finalTopic.text];
     
     setSpinningTopics(repeatedTopics);
     
