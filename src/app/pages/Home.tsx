@@ -49,7 +49,7 @@ export default function Home() {
       setCurrentTopic(finalTopic.text);
       setIsSpinning(false);
       setShowTopicPopup(true);
-    }, 3000);
+    }, 2500);
   };
 
   const handleTimer = () => {
@@ -103,18 +103,19 @@ export default function Home() {
 
         {/* Topic Display Area */}
         <div className="w-full">
-          <div className="relative bg-white rounded-[2rem] p-12 md:p-16 min-h-[220px] flex items-center justify-center overflow-hidden shadow-[0_8px_30px_rgb(251,146,60,0.15)]">
+          <div className="relative bg-white rounded-[2rem] p-12 md:p-16 min-h-[220px] flex items-center justify-center shadow-[0_8px_30px_rgb(251,146,60,0.15)]" style={{ overflow: 'hidden' }}>
             {isSpinning ? (
-              <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+              <div className="w-full h-full absolute inset-0 flex items-center justify-center" style={{ overflow: 'hidden' }}>
                 <motion.div
-                  animate={{ y: [0, -100 * spinningTopics.length] }}
-                  transition={{ duration: 3, ease: [0.33, 1, 0.68, 1] }}
+                  animate={{ y: [0, -100 * (spinningTopics.length - 1)] }}
+                  transition={{ duration: 2.5, ease: [0.33, 1, 0.68, 1] }}
                   className="flex flex-col"
+                  style={{ willChange: 'transform' }}
                 >
                   {spinningTopics.map((topic, index) => (
                     <div
                       key={index}
-                      className="h-[100px] flex items-center justify-center px-8 text-center text-xl md:text-2xl text-amber-900 font-medium"
+                      className="h-[100px] flex items-center justify-center px-8 text-center text-xl md:text-2xl text-amber-900 font-medium flex-shrink-0"
                     >
                       {topic}
                     </div>
