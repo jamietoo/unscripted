@@ -15,6 +15,7 @@ export default function RecordPage() {
   const [isComplete, setIsComplete] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>("");
+  const [audioMimeType, setAudioMimeType] = useState<string>("audio/webm");
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   
@@ -102,10 +103,34 @@ export default function RecordPage() {
     setPermissionError(null);
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false  // Disable auto gain to prevent echo artifacts
+        } 
+      });
+      
+      // Try different MIME types in order of browser compatibility
+      let mimeType = "audio/webm";
+      const options = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/wav"
+      ];
+      
+      for (const type of options) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      setAudioMimeType(mimeType);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -114,7 +139,7 @@ export default function RecordPage() {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         setAudioBlob(blob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -157,6 +182,7 @@ export default function RecordPage() {
     setIsRecording(false);
     setIsComplete(false);
     setAudioBlob(null);
+    setAudioMimeType("audio/webm");
     chunksRef.current = [];
   };
 
@@ -171,7 +197,14 @@ export default function RecordPage() {
       const url = URL.createObjectURL(audioBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `speaking-practice-${Date.now()}.webm`;
+      
+      // Determine file extension based on MIME type
+      let extension = "webm";
+      if (audioMimeType.includes("mp4")) extension = "mp4";
+      else if (audioMimeType.includes("wav")) extension = "wav";
+      else if (audioMimeType.includes("opus")) extension = "opus";
+      
+      a.download = `speaking-practice-${Date.now()}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -293,7 +326,14 @@ export default function RecordPage() {
             <p className="text-3xl font-bold text-orange-400">Time's up! You did amazing! 🎉</p>
             {audioBlob && (
               <div className="flex flex-col gap-6 items-center">
-                <audio controls src={audioUrl} className="w-full max-w-md rounded-[2rem]" />
+                <div className="w-full max-w-md">
+                  <audio 
+                    controls 
+                    src={audioUrl} 
+                    className="w-full rounded-[2rem]"
+                    controlsList="nodownload"
+                  />
+                </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button 
                     onClick={downloadRecording}

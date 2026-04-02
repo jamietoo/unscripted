@@ -12,26 +12,47 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     throw new Error("OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file.");
   }
 
+  // If blob is WebM, try to convert or send as-is
+  // Whisper API supports: mp4, mpeg, mpga, m4a, wav, webm
+  let fileWithExt = "audio.webm";
+  if (audioBlob.type.includes("mp4")) {
+    fileWithExt = "audio.mp4";
+  } else if (audioBlob.type.includes("wav")) {
+    fileWithExt = "audio.wav";
+  } else if (audioBlob.type.includes("opus")) {
+    fileWithExt = "audio.opus";
+  }
+
   const formData = new FormData();
-  formData.append("file", audioBlob, "audio.webm");
+  formData.append("file", audioBlob, fileWithExt);
   formData.append("model", "whisper-1");
   formData.append("language", "en");
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
+  try {
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Failed to transcribe audio");
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!result.text) {
+      throw new Error("No transcription received from API");
+    }
+    return result.text;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Network error during transcription");
   }
-
-  const result = await response.json();
-  return result.text;
 }
 
 // Helper function to highlight text
