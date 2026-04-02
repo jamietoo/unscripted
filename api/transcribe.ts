@@ -16,40 +16,51 @@ export default async function handler(
     
     if (!apiKey) {
       return res.status(500).json({ 
-        error: 'Server configuration error: OpenAI API key not configured in Vercel environment variables'
+        error: 'Server configuration error: OpenAI API key not configured'
       });
     }
 
+    // Get model and language from query params
+    const { model = 'whisper-1', language = 'en' } = req.query;
     const contentType = req.headers['content-type'] as string;
+    
+    console.log('Query params - model:', model, 'language:', language);
     console.log('Content-Type:', contentType);
+
+    // Get the raw audio body
+    const audioBuffer = req.body as Buffer | string;
     
-    if (!contentType?.includes('multipart')) {
-      throw new Error('Request must be multipart/form-data');
+    if (!audioBuffer) {
+      throw new Error('No audio data received');
     }
 
-    // Try to get raw body - sometimes Vercel provides this
-    const rawBody = (req as any).rawBody || req.body;
-    let bodyBuffer: Buffer;
+    const buffer = typeof audioBuffer === 'string' 
+      ? Buffer.from(audioBuffer, 'utf-8')
+      : audioBuffer;
     
-    if (typeof rawBody === 'string') {
-      bodyBuffer = Buffer.from(rawBody, 'utf-8');
-    } else if (Buffer.isBuffer(rawBody)) {
-      bodyBuffer = rawBody;
-    } else {
-      throw new Error(`Unexpected body type: ${typeof rawBody}`);
-    }
-    
-    console.log('Body size:', bodyBuffer.length, 'bytes');
+    console.log('Audio buffer size:', buffer.length, 'bytes');
 
-    // Forward to OpenAI
+    // Create FormData for OpenAI
+    const openAIFormData = new FormData();
+    const audioFile = new File(
+      [buffer],
+      'audio.webm',
+      { type: contentType || 'audio/webm;codecs=opus' }
+    );
+    
+    openAIFormData.append('file', audioFile);
+    openAIFormData.append('model', String(model));
+    openAIFormData.append('language', String(language));
+
+    console.log('Sending to OpenAI - file:', audioFile.size, 'bytes, model:', model, 'language:', language);
+
+    // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': contentType,
-        'Content-Length': bodyBuffer.length.toString(),
       },
-      body: bodyBuffer,
+      body: openAIFormData,
     });
 
     console.log('OpenAI response status:', response.status);
@@ -66,17 +77,11 @@ export default async function handler(
       console.error('OpenAI error:', response.status, errorDetail);
 
       if (response.status === 401) {
-        return res.status(401).json({ 
-          error: 'Authentication failed. Invalid API key.'
-        });
+        return res.status(401).json({ error: 'Invalid OpenAI API key' });
       } else if (response.status === 429) {
-        return res.status(429).json({ 
-          error: 'Rate limited. Please try again later.' 
-        });
+        return res.status(429).json({ error: 'Rate limited. Try again later.' });
       } else if (response.status === 413) {
-        return res.status(413).json({ 
-          error: 'Audio file too large. Max 25MB.' 
-        });
+        return res.status(413).json({ error: 'Audio file too large. Max 25MB.' });
       }
 
       return res.status(response.status).json({ 

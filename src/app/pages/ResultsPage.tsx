@@ -14,21 +14,19 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     throw new Error("❌ Audio file is empty. Please record longer.");
   }
 
-  // Create FormData with the audio file
-  const formData = new FormData();
-  formData.append("file", audioBlob, "audio.webm");
-  formData.append("model", "whisper-1");
-  formData.append("language", "en");
-
   console.log("Sending request to backend API (/api/transcribe)...");
 
   try {
     const startTime = Date.now();
     
     // Call our backend proxy instead of OpenAI directly
-    const response = await fetch("/api/transcribe", {
+    // Send raw audio blob as binary, with model/language as query params
+    const response = await fetch("/api/transcribe?model=whisper-1&language=en", {
       method: "POST",
-      body: formData,
+      headers: {
+        'Content-Type': audioBlob.type || 'audio/webm',
+      },
+      body: audioBlob,
     });
 
     const duration = Date.now() - startTime;
