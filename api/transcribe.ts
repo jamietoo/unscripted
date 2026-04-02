@@ -15,35 +15,39 @@ export default async function handler(
     console.log('API Key present:', !!apiKey);
     
     if (!apiKey) {
-      console.error('Missing API key');
       return res.status(500).json({ 
-        error: 'Server configuration error: OpenAI API key not configured in Vercel environment variables',
-        hint: 'Add VITE_OPENAI_API_KEY to Project Settings > Environment Variables'
+        error: 'Server configuration error: OpenAI API key not configured in Vercel environment variables'
       });
     }
 
     const contentType = req.headers['content-type'] as string;
-    console.log('Request Content-Type:', contentType);
+    console.log('Content-Type:', contentType);
     
     if (!contentType?.includes('multipart')) {
       throw new Error('Request must be multipart/form-data');
     }
 
-    // Get the raw body as buffer
-    let bodyBuffer = req.body;
-    if (typeof bodyBuffer === 'string') {
-      bodyBuffer = Buffer.from(bodyBuffer, 'utf-8');
+    // Try to get raw body - sometimes Vercel provides this
+    const rawBody = (req as any).rawBody || req.body;
+    let bodyBuffer: Buffer;
+    
+    if (typeof rawBody === 'string') {
+      bodyBuffer = Buffer.from(rawBody, 'utf-8');
+    } else if (Buffer.isBuffer(rawBody)) {
+      bodyBuffer = rawBody;
+    } else {
+      throw new Error(`Unexpected body type: ${typeof rawBody}`);
     }
     
-    console.log('Body received - type:', typeof bodyBuffer, 'is buffer:', Buffer.isBuffer(bodyBuffer), 'size:', bodyBuffer?.length);
+    console.log('Body size:', bodyBuffer.length, 'bytes');
 
-    // Forward the exact same request to OpenAI with the exact same Content-Type
-    // This preserves the multipart boundaries
+    // Forward to OpenAI
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': contentType, // Critical: include the boundary!
+        'Content-Type': contentType,
+        'Content-Length': bodyBuffer.length.toString(),
       },
       body: bodyBuffer,
     });
@@ -53,19 +57,17 @@ export default async function handler(
     if (!response.ok) {
       let errorDetail = '';
       try {
-        const error = await response.json();
-        errorDetail = error.error?.message || JSON.stringify(error);
+        const errorJson = await response.json();
+        errorDetail = errorJson.error?.message || JSON.stringify(errorJson);
       } catch {
         errorDetail = await response.text();
       }
 
-      console.error('OpenAI API error:', response.status, errorDetail);
+      console.error('OpenAI error:', response.status, errorDetail);
 
       if (response.status === 401) {
         return res.status(401).json({ 
-          error: 'Authentication failed with OpenAI API',
-          detail: 'The API key provided is invalid or expired',
-          hint: 'Check your VITE_OPENAI_API_KEY in Vercel environment variables'
+          error: 'Authentication failed. Invalid API key.'
         });
       } else if (response.status === 429) {
         return res.status(429).json({ 
@@ -93,4 +95,5 @@ export default async function handler(
       error: `Server error: ${errorMessage}` 
     });
   }
+}
 }
