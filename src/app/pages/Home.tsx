@@ -34,32 +34,27 @@ export default function Home() {
     
     const filteredTopics = getFilteredTopics();
     
-    // Create array of random topics for spinning animation
+    // Create array of topics for continuous spinning animation
     const spinTopics: string[] = [];
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 50; i++) {
       const randomTopic = filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
       spinTopics.push(randomTopic.text);
     }
     
-    // Add the final topic
+    // Add the final topic at the end
     const finalTopic = filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
     spinTopics.push(finalTopic.text);
     
     setSpinningTopics(spinTopics);
     setSelectedTopic(finalTopic.text);
     
-    // After animation completes, show processing spinner
+    // After continuous spinning completes, immediately show popup
     setTimeout(() => {
+      setCurrentTopic(finalTopic.text);
       setIsSpinning(false);
-      setIsProcessing(true);
-      
-      // Then show popup after brief processing moment
-      setTimeout(() => {
-        setCurrentTopic(finalTopic.text);
-        setIsProcessing(false);
-        setShowTopicPopup(true);
-      }, 100);
-    }, 2500);
+      setIsProcessing(false);
+      setShowTopicPopup(true);
+    }, 3500);
   };
 
   const handleTimer = () => {
@@ -118,7 +113,7 @@ export default function Home() {
               <div className="w-full h-full absolute inset-0 flex items-center justify-center" style={{ overflow: 'hidden' }}>
                 <motion.div
                   animate={{ y: [0, -100 * (spinningTopics.length - 1)] }}
-                  transition={{ duration: 2.5, ease: [0.33, 1, 0.68, 1] }}
+                  transition={{ duration: 3.5, ease: [0.33, 1, 0.68, 1] }}
                   className="flex flex-col"
                   style={{ willChange: 'transform' }}
                 >
