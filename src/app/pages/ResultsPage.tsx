@@ -8,14 +8,21 @@ import { ArrowLeft, Home, Copy, Check, AlertCircle } from "lucide-react";
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   
+  console.log("=== TRANSCRIPTION DEBUG ===");
+  console.log("API Key present:", !!apiKey);
+  console.log("API Key starts with:", apiKey?.substring(0, 10) + "...");
+  console.log("Audio blob size:", audioBlob.size, "bytes");
+  console.log("Audio blob type:", audioBlob.type);
+  
   if (!apiKey) {
-    throw new Error("OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file.");
+    throw new Error("❌ OpenAI API key not configured. Add VITE_OPENAI_API_KEY to .env");
   }
 
-  console.log("Starting transcription with audio blob size:", audioBlob.size, "type:", audioBlob.type);
+  if (audioBlob.size === 0) {
+    throw new Error("❌ Audio file is empty. Please record longer.");
+  }
 
-  // If blob is WebM, try to convert or send as-is
-  // Whisper API supports: mp4, mpeg, mpga, m4a, wav, webm
+  // Determine correct file extension
   let fileWithExt = "audio.webm";
   if (audioBlob.type.includes("mp4")) {
     fileWithExt = "audio.mp4";
@@ -25,14 +32,18 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     fileWithExt = "audio.opus";
   }
 
+  console.log("File extension:", fileWithExt);
+
   const formData = new FormData();
   formData.append("file", audioBlob, fileWithExt);
   formData.append("model", "whisper-1");
   formData.append("language", "en");
 
-  console.log("Sending to OpenAI API with file extension:", fileWithExt);
+  console.log("Sending request to OpenAI...");
 
   try {
+    const startTime = Date.now();
+    
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: {
@@ -41,43 +52,63 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
       body: formData,
     });
 
-    console.log("API response status:", response.status);
+    const duration = Date.now() - startTime;
+    console.log(`API Response received after ${duration}ms`);
+    console.log("Status:", response.status, response.statusText);
+    console.log("Content-Type:", response.headers.get("content-type"));
 
     if (!response.ok) {
       let errorDetail = "";
       try {
-        const error = await response.json();
-        errorDetail = error.error?.message || JSON.stringify(error);
-      } catch {
+        const errorJson = await response.json();
+        console.log("Error JSON:", errorJson);
+        errorDetail = errorJson.error?.message || JSON.stringify(errorJson);
+      } catch (e) {
         errorDetail = await response.text();
+        console.log("Error text:", errorDetail);
       }
       
-      console.error("API error response:", errorDetail);
-      
       if (response.status === 401) {
-        throw new Error("Authentication failed. Check your OpenAI API key.");
+        throw new Error("🔑 API key is invalid or expired. Check your OpenAI account.");
       } else if (response.status === 429) {
-        throw new Error("Rate limited. Please wait a moment and try again.");
+        throw new Error("⏱️ Rate limited. OpenAI API quota exceeded. Try again later.");
       } else if (response.status === 413) {
-        throw new Error("Audio file too large. Please record a shorter duration.");
+        throw new Error("📁 Audio file too large (max 25MB). Record shorter.");
+      } else if (response.status === 400) {
+        throw new Error(`❌ Invalid request: ${errorDetail}`);
       } else {
-        throw new Error(`API Error (${response.status}): ${errorDetail}`);
+        throw new Error(`API Error ${response.status}: ${errorDetail}`);
       }
     }
 
     const result = await response.json();
-    console.log("Transcription result:", result);
+    console.log("Full API response:", result);
     
     if (!result.text) {
-      throw new Error("No transcription received from API. The audio may be unclear or too short.");
+      throw new Error("❓ No transcription text returned. Audio may be too quiet or unclear.");
     }
+    
+    console.log("✅ Transcription successful!");
+    console.log("Text:", result.text);
     return result.text;
+    
   } catch (error) {
-    console.error("Transcription error:", error);
+    console.error("❌ Transcription error caught:", error);
+    
+    if (error instanceof TypeError) {
+      // Network error or CORS issue
+      console.error("Network error details:", {
+        message: error.message,
+        stack: error.stack
+      });
+      throw new Error("🌐 Network error. Check internet connection or try again.");
+    }
+    
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error("Network error during transcription. Please check your internet connection.");
+    
+    throw new Error("Unknown error during transcription");
   }
 }
 
@@ -210,8 +241,13 @@ export default function ResultsPage() {
   
   // Transcribe audio when component mounts
   useEffect(() => {
+    console.log("=== RESULTS PAGE LOADING ===");
+    console.log("Audio blob from location.state:", audioBlob);
+    console.log("Audio blob type:", audioBlob?.type);
+    console.log("Audio blob size:", audioBlob?.size);
+    
     if (!audioBlob) {
-      setError("No audio file provided. Please record a new session.");
+      setError("❌ No audio file provided. Please record a new session.");
       setIsLoading(false);
       return;
     }
@@ -225,6 +261,7 @@ export default function ResultsPage() {
         setTranscription(text);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to transcribe audio. Please try again.";
+        console.error("Transcription error in useEffect:", errorMessage);
         setError(errorMessage);
         setTranscription("");
       } finally {
