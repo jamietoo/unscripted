@@ -58,7 +58,7 @@ export default function Home() {
         setCurrentTopic(finalTopic.text);
         setIsProcessing(false);
         setShowTopicPopup(true);
-      }, 800);
+      }, 100);
     }, 2500);
   };
 
