@@ -6,16 +6,28 @@ import { ArrowLeft, Home, Copy, Check, AlertCircle } from "lucide-react";
 
 // Transcribe audio using OpenAI Whisper API
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  // Try multiple ways to get the API key
+  let apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  
+  // Fallback: check window object (in case injected differently)
+  if (!apiKey && typeof window !== 'undefined') {
+    apiKey = (window as any).VITE_OPENAI_API_KEY;
+  }
   
   console.log("=== TRANSCRIPTION DEBUG ===");
+  console.log("Environment keys with API/OPENAI:", Object.keys(import.meta.env).filter(k => k.includes('API') || k.includes('OPENAI')));
+  console.log("import.meta.env.VITE_OPENAI_API_KEY:", import.meta.env.VITE_OPENAI_API_KEY ? "SET" : "NOT SET");
   console.log("API Key present:", !!apiKey);
-  console.log("API Key starts with:", apiKey?.substring(0, 10) + "...");
+  if (apiKey) {
+    console.log("API Key starts with:", apiKey.substring(0, 15) + "...");
+  }
   console.log("Audio blob size:", audioBlob.size, "bytes");
   console.log("Audio blob type:", audioBlob.type);
   
   if (!apiKey) {
-    throw new Error("❌ OpenAI API key not configured. Add VITE_OPENAI_API_KEY to .env");
+    const msg = "🔑 OpenAI API key not found. Check Vercel environment variables or .env file for VITE_OPENAI_API_KEY";
+    console.error(msg);
+    throw new Error(msg);
   }
 
   if (audioBlob.size === 0) {
