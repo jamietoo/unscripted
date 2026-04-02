@@ -4,90 +4,55 @@ import { motion } from "motion/react";
 import { Button } from "../components/ui/button";
 import { ArrowLeft, Home, Copy, Check, AlertCircle } from "lucide-react";
 
-// Transcribe audio using OpenAI Whisper API
+// Transcribe audio using backend API proxy
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
-  // Try multiple ways to get the API key
-  let apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  
-  // Fallback: check window object (in case injected differently)
-  if (!apiKey && typeof window !== 'undefined') {
-    apiKey = (window as any).VITE_OPENAI_API_KEY;
-  }
-  
   console.log("=== TRANSCRIPTION DEBUG ===");
-  console.log("Environment keys with API/OPENAI:", Object.keys(import.meta.env).filter(k => k.includes('API') || k.includes('OPENAI')));
-  console.log("import.meta.env.VITE_OPENAI_API_KEY:", import.meta.env.VITE_OPENAI_API_KEY ? "SET" : "NOT SET");
-  console.log("API Key present:", !!apiKey);
-  if (apiKey) {
-    console.log("API Key starts with:", apiKey.substring(0, 15) + "...");
-  }
   console.log("Audio blob size:", audioBlob.size, "bytes");
   console.log("Audio blob type:", audioBlob.type);
-  
-  if (!apiKey) {
-    const msg = "🔑 OpenAI API key not found. Check Vercel environment variables or .env file for VITE_OPENAI_API_KEY";
-    console.error(msg);
-    throw new Error(msg);
-  }
 
   if (audioBlob.size === 0) {
     throw new Error("❌ Audio file is empty. Please record longer.");
   }
 
-  // Determine correct file extension
-  let fileWithExt = "audio.webm";
-  if (audioBlob.type.includes("mp4")) {
-    fileWithExt = "audio.mp4";
-  } else if (audioBlob.type.includes("wav")) {
-    fileWithExt = "audio.wav";
-  } else if (audioBlob.type.includes("opus")) {
-    fileWithExt = "audio.opus";
-  }
-
-  console.log("File extension:", fileWithExt);
-
+  // Create FormData with the audio file
   const formData = new FormData();
-  formData.append("file", audioBlob, fileWithExt);
+  formData.append("file", audioBlob, "audio.webm");
   formData.append("model", "whisper-1");
   formData.append("language", "en");
 
-  console.log("Sending request to OpenAI...");
+  console.log("Sending request to backend API (/api/transcribe)...");
 
   try {
     const startTime = Date.now();
     
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    // Call our backend proxy instead of OpenAI directly
+    const response = await fetch("/api/transcribe", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-      },
       body: formData,
     });
 
     const duration = Date.now() - startTime;
-    console.log(`API Response received after ${duration}ms`);
+    console.log(`Backend response received after ${duration}ms`);
     console.log("Status:", response.status, response.statusText);
-    console.log("Content-Type:", response.headers.get("content-type"));
 
     if (!response.ok) {
       let errorDetail = "";
       try {
         const errorJson = await response.json();
-        console.log("Error JSON:", errorJson);
-        errorDetail = errorJson.error?.message || JSON.stringify(errorJson);
+        console.log("Error response:", errorJson);
+        errorDetail = errorJson.error || JSON.stringify(errorJson);
       } catch (e) {
         errorDetail = await response.text();
-        console.log("Error text:", errorDetail);
       }
       
       if (response.status === 401) {
-        throw new Error("🔑 API key is invalid or expired. Check your OpenAI account.");
+        throw new Error("🔑 API authentication failed. Check your OpenAI API key.");
       } else if (response.status === 429) {
         throw new Error("⏱️ Rate limited. OpenAI API quota exceeded. Try again later.");
       } else if (response.status === 413) {
         throw new Error("📁 Audio file too large (max 25MB). Record shorter.");
-      } else if (response.status === 400) {
-        throw new Error(`❌ Invalid request: ${errorDetail}`);
+      } else if (response.status === 500) {
+        throw new Error(`❌ Server error: ${errorDetail}`);
       } else {
         throw new Error(`API Error ${response.status}: ${errorDetail}`);
       }
@@ -109,7 +74,6 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     console.error("Error type:", error?.constructor?.name);
     
     if (error instanceof TypeError) {
-      // Network error or CORS issue
       console.error("Network error details:", {
         message: error.message,
         stack: error.stack
@@ -118,9 +82,8 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     }
     
     if (error instanceof SyntaxError) {
-      // JSON parsing error
       console.error("JSON parse error:", error.message);
-      throw new Error("💥 Invalid API response. OpenAI API may be down.");
+      throw new Error("💥 Invalid API response. Server may be down.");
     }
     
     if (error instanceof Error) {
