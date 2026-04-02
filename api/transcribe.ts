@@ -1,5 +1,34 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 
+// Helper to read request body in Vercel
+async function getRequestBody(req: VercelRequest): Promise<Buffer> {
+  // Vercel sometimes provides rawBody
+  if ((req as any).rawBody) {
+    const body = (req as any).rawBody;
+    return typeof body === 'string' ? Buffer.from(body) : body;
+  }
+
+  // Otherwise, read from the req stream
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+
+    req.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      resolve(Buffer.concat(chunks));
+    });
+
+    req.on('error', reject);
+    
+    // Set timeout
+    setTimeout(() => {
+      reject(new Error('Request body read timeout'));
+    }, 30000);
+  });
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -27,25 +56,22 @@ export default async function handler(
     console.log('Query params - model:', model, 'language:', language);
     console.log('Content-Type:', contentType);
 
-    // Get the raw audio body
-    const audioBuffer = req.body as Buffer | string;
+    // Read the request body
+    console.log('Reading request body...');
+    const audioBuffer = await getRequestBody(req);
     
-    if (!audioBuffer) {
+    console.log('Audio buffer received - size:', audioBuffer.length, 'bytes');
+
+    if (!audioBuffer || audioBuffer.length === 0) {
       throw new Error('No audio data received');
     }
-
-    const buffer = typeof audioBuffer === 'string' 
-      ? Buffer.from(audioBuffer, 'utf-8')
-      : audioBuffer;
-    
-    console.log('Audio buffer size:', buffer.length, 'bytes');
 
     // Create FormData for OpenAI
     const openAIFormData = new FormData();
     const audioFile = new File(
-      [buffer],
+      [audioBuffer],
       'audio.webm',
-      { type: contentType || 'audio/webm;codecs=opus' }
+      { type: contentType?.split(';')[0] || 'audio/webm' }
     );
     
     openAIFormData.append('file', audioFile);
