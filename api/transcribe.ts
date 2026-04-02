@@ -29,16 +29,17 @@ export default async function handler(
       });
     }
 
-    const formData = req.body;
-
     console.log('Transcription request received, forwarding to OpenAI...');
+    console.log('Request Content-Type:', req.headers['content-type']);
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
+        // Preserve the multipart/form-data boundary from the incoming request
+        'Content-Type': req.headers['content-type'] || 'application/octet-stream',
       },
-      body: formData,
+      body: req.body,
     });
 
     console.log('OpenAI response status:', response.status);
