@@ -31,15 +31,28 @@ export default async function handler(
 
     console.log('Transcription request received, forwarding to OpenAI...');
     console.log('Request Content-Type:', req.headers['content-type']);
+    console.log('Request body type:', typeof req.body);
+    console.log('Request body keys:', typeof req.body === 'object' ? Object.keys(req.body).slice(0, 5) : 'N/A');
+
+    // For Vercel, req.body is already a parsed object/buffer
+    // We need to reconstruct the multipart FormData or convert to Buffer
+    let bodyToSend: any = req.body;
+    
+    // If body is a string or Buffer, send as-is
+    // If it's an object (which shouldn't happen with multipart), log it
+    if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      console.log('❌ Request body is an object, not a Buffer. This may cause issues.');
+      console.log('Body sample:', JSON.stringify(req.body).substring(0, 200));
+    }
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        // Preserve the multipart/form-data boundary from the incoming request
+        // Send the same Content-Type as the incoming request
         'Content-Type': req.headers['content-type'] || 'application/octet-stream',
       },
-      body: req.body,
+      body: bodyToSend,
     });
 
     console.log('OpenAI response status:', response.status);
