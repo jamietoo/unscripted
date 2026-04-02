@@ -6,11 +6,13 @@ import { ArrowLeft, Home, Copy, Check, AlertCircle } from "lucide-react";
 
 // Transcribe audio using OpenAI Whisper API
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
-  const apiKey = (import.meta as any).env.VITE_OPENAI_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   
   if (!apiKey) {
     throw new Error("OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file.");
   }
+
+  console.log("Starting transcription with audio blob size:", audioBlob.size, "type:", audioBlob.type);
 
   // If blob is WebM, try to convert or send as-is
   // Whisper API supports: mp4, mpeg, mpga, m4a, wav, webm
@@ -28,6 +30,8 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
   formData.append("model", "whisper-1");
   formData.append("language", "en");
 
+  console.log("Sending to OpenAI API with file extension:", fileWithExt);
+
   try {
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
@@ -37,21 +41,43 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
       body: formData,
     });
 
+    console.log("API response status:", response.status);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `API error: ${response.status}`);
+      let errorDetail = "";
+      try {
+        const error = await response.json();
+        errorDetail = error.error?.message || JSON.stringify(error);
+      } catch {
+        errorDetail = await response.text();
+      }
+      
+      console.error("API error response:", errorDetail);
+      
+      if (response.status === 401) {
+        throw new Error("Authentication failed. Check your OpenAI API key.");
+      } else if (response.status === 429) {
+        throw new Error("Rate limited. Please wait a moment and try again.");
+      } else if (response.status === 413) {
+        throw new Error("Audio file too large. Please record a shorter duration.");
+      } else {
+        throw new Error(`API Error (${response.status}): ${errorDetail}`);
+      }
     }
 
     const result = await response.json();
+    console.log("Transcription result:", result);
+    
     if (!result.text) {
-      throw new Error("No transcription received from API");
+      throw new Error("No transcription received from API. The audio may be unclear or too short.");
     }
     return result.text;
   } catch (error) {
+    console.error("Transcription error:", error);
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error("Network error during transcription");
+    throw new Error("Network error during transcription. Please check your internet connection.");
   }
 }
 
@@ -177,6 +203,7 @@ export default function ResultsPage() {
   const [transcription, setTranscription] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
   
   const audioBlob = location.state?.audioBlob as Blob | undefined;
@@ -192,6 +219,7 @@ export default function ResultsPage() {
     const doTranscription = async () => {
       try {
         setIsLoading(true);
+        setRetrying(false);
         setError(null);
         const text = await transcribeAudio(audioBlob);
         setTranscription(text);
@@ -205,7 +233,11 @@ export default function ResultsPage() {
     };
 
     doTranscription();
-  }, [audioBlob]);
+  }, [audioBlob, retrying]);
+  
+  const handleRetry = () => {
+    setRetrying(true);
+  };
   
   const segments = transcription ? highlightText(transcription) : [];
   
@@ -259,13 +291,22 @@ export default function ResultsPage() {
             <div className="flex flex-col items-center justify-center h-full gap-4">
               <AlertCircle className="w-12 h-12 text-red-500" />
               <p className="text-lg text-red-800 font-medium">Transcription Failed</p>
-              <p className="text-sm text-red-600 text-center">{error}</p>
-              <Button
-                onClick={() => navigate("/")}
-                className="mt-4 bg-gradient-to-r from-orange-400 to-amber-400 hover:from-orange-500 hover:to-amber-500 text-white rounded-full px-8 py-3"
-              >
-                🔄 Try Again
-              </Button>
+              <p className="text-sm text-red-600 text-center max-w-sm">{error}</p>
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <Button
+                  onClick={handleRetry}
+                  disabled={isLoading}
+                  className="bg-gradient-to-r from-blue-400 to-cyan-400 hover:from-blue-500 hover:to-cyan-500 text-white rounded-full px-8 py-3 font-semibold"
+                >
+                  🔄 Retry
+                </Button>
+                <Button
+                  onClick={() => navigate("/")}
+                  className="bg-gradient-to-r from-orange-400 to-amber-400 hover:from-orange-500 hover:to-amber-500 text-white rounded-full px-8 py-3 font-semibold"
+                >
+                  🏠 Back Home
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="text-base md:text-lg leading-relaxed text-amber-900">
