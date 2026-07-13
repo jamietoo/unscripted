@@ -50,8 +50,12 @@ export default async function handler(
     }
 
     // Get model and language from query params
-    const { model = 'whisper-1', language = 'en' } = req.query;
+    const { model = 'gpt-4o-mini-transcribe', language = 'en' } = req.query;
     const contentType = req.headers['content-type'] as string;
+    const requestedModel = String(model);
+    const modelCandidates = Array.from(new Set([requestedModel, 'whisper-1']));
+    const transcriptionPrompt =
+      'Transcribe verbatim. Preserve filler words, hesitations, false starts, repeated words, and spoken tics like uhh, umm, like, err, and similar sounds. Do not clean up, summarize, or omit anything the speaker said.';
     
     console.log('Query params - model:', model, 'language:', language);
     console.log('Content-Type:', contentType);
@@ -66,32 +70,39 @@ export default async function handler(
       throw new Error('No audio data received');
     }
 
-    // Create FormData for OpenAI
-    const openAIFormData = new FormData();
     const audioFile = new File(
       [audioBuffer],
       'audio.webm',
       { type: contentType?.split(';')[0] || 'audio/webm' }
     );
-    
-    openAIFormData.append('file', audioFile);
-    openAIFormData.append('model', String(model));
-    openAIFormData.append('language', String(language));
+    let finalErrorStatus = 500;
+    let finalErrorDetail = 'Unknown OpenAI transcription error';
 
-    console.log('Sending to OpenAI - file:', audioFile.size, 'bytes, model:', model, 'language:', language);
+    for (const currentModel of modelCandidates) {
+      const openAIFormData = new FormData();
+      openAIFormData.append('file', audioFile);
+      openAIFormData.append('model', currentModel);
+      openAIFormData.append('language', String(language));
+      openAIFormData.append('prompt', transcriptionPrompt);
 
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: openAIFormData,
-    });
+      console.log('Sending to OpenAI - file:', audioFile.size, 'bytes, model:', currentModel, 'language:', language);
 
-    console.log('OpenAI response status:', response.status);
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: openAIFormData,
+      });
 
-    if (!response.ok) {
+      console.log('OpenAI response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Transcription successful');
+        return res.status(200).json(result);
+      }
+
       let errorDetail = '';
       try {
         const errorJson = await response.json();
@@ -101,23 +112,30 @@ export default async function handler(
       }
 
       console.error('OpenAI error:', response.status, errorDetail);
+      finalErrorStatus = response.status;
+      finalErrorDetail = errorDetail;
 
-      if (response.status === 401) {
-        return res.status(401).json({ error: 'Invalid OpenAI API key' });
-      } else if (response.status === 429) {
-        return res.status(429).json({ error: 'Rate limited. Try again later.' });
-      } else if (response.status === 413) {
-        return res.status(413).json({ error: 'Audio file too large. Max 25MB.' });
+      const canFallback = currentModel !== modelCandidates[modelCandidates.length - 1]
+        && (response.status === 400 || response.status === 404 || response.status === 422);
+
+      if (!canFallback) {
+        break;
       }
 
-      return res.status(response.status).json({ 
-        error: `OpenAI API error: ${errorDetail}` 
-      });
+      console.log('Falling back to whisper-1 after model error.');
     }
 
-    const result = await response.json();
-    console.log('✅ Transcription successful');
-    return res.status(200).json(result);
+    if (finalErrorStatus === 401) {
+      return res.status(401).json({ error: 'Invalid OpenAI API key' });
+    } else if (finalErrorStatus === 429) {
+      return res.status(429).json({ error: 'Rate limited. Try again later.' });
+    } else if (finalErrorStatus === 413) {
+      return res.status(413).json({ error: 'Audio file too large. Max 25MB.' });
+    }
+
+    return res.status(finalErrorStatus).json({ 
+      error: `OpenAI API error: ${finalErrorDetail}` 
+    });
 
   } catch (error) {
     console.error('Transcription error:', error);
@@ -126,5 +144,4 @@ export default async function handler(
       error: `Server error: ${errorMessage}` 
     });
   }
-}
 }
