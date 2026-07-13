@@ -21,7 +21,7 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
     
     // Call our backend proxy instead of OpenAI directly
     // Send raw audio blob as binary, with model/language as query params
-    const response = await fetch("/api/transcribe?model=gpt-4o-mini-transcribe&language=en", {
+    const response = await fetch("/api/transcribe?model=gpt-4o-transcribe&language=en", {
       method: "POST",
       headers: {
         'Content-Type': audioBlob.type || 'audio/webm',

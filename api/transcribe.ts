@@ -50,12 +50,12 @@ export default async function handler(
     }
 
     // Get model and language from query params
-    const { model = 'gpt-4o-mini-transcribe', language = 'en' } = req.query;
+    const { model = 'gpt-4o-transcribe', language = 'en' } = req.query;
     const contentType = req.headers['content-type'] as string;
     const requestedModel = String(model);
-    const modelCandidates = Array.from(new Set([requestedModel, 'whisper-1']));
+    const modelCandidates = Array.from(new Set([requestedModel, 'gpt-4o-mini-transcribe']));
     const transcriptionPrompt =
-      'Transcribe verbatim. Preserve filler words, hesitations, false starts, repeated words, and spoken tics like uhh, umm, like, err, and similar sounds. Do not clean up, summarize, or omit anything the speaker said.';
+      'Literal transcription only. Preserve every filler word and vocal hesitation exactly as spoken, including uhh, uh, umm, um, like, er, erm, err, hmm, ah, mm, and repeated fragments. Do not clean up grammar, do not summarize, do not normalize punctuation, and do not omit any sound that was spoken.';
     
     console.log('Query params - model:', model, 'language:', language);
     console.log('Content-Type:', contentType);
@@ -84,6 +84,8 @@ export default async function handler(
       openAIFormData.append('model', currentModel);
       openAIFormData.append('language', String(language));
       openAIFormData.append('prompt', transcriptionPrompt);
+      openAIFormData.append('temperature', '0');
+      openAIFormData.append('response_format', 'json');
 
       console.log('Sending to OpenAI - file:', audioFile.size, 'bytes, model:', currentModel, 'language:', language);
 
@@ -122,7 +124,7 @@ export default async function handler(
         break;
       }
 
-      console.log('Falling back to whisper-1 after model error.');
+      console.log('Falling back to gpt-4o-mini-transcribe after model error.');
     }
 
     if (finalErrorStatus === 401) {
